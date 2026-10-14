@@ -1,0 +1,71 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check release version
+        shell: pwsh
+        run: |
+          $lock = Get-Content package-lock.json -Raw | ConvertFrom-Json -AsHashtable
+          $versions = @(
+            (Get-Content package.json -Raw | ConvertFrom-Json -AsHashtable).version
+            $lock.version
+            $lock.packages[''].version
+            (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json -AsHashtable).version
+            [regex]::Match((Get-Content src-tauri/Cargo.toml -Raw), '(?m)^version = "([^"]+)"').Groups[1].Value
+          )
+          if ($versions.Where({ $_ -ne $env:GITHUB_REF_NAME }).Count) {
+            throw "Tag $env:GITHUB_REF_NAME must match all application versions: $($versions -join ', ')"
+          }
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check frontend
+        run: |
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+
+      - name: Check Rust
+        run: |
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Storage Explorer ${{ github.ref_name }}
+          releaseBody: Download the Windows installer or standalone executable below. WebView2 is required to run the application.
+          releaseDraft: false
+          prerelease: false
+          uploadPlainBinary: true
