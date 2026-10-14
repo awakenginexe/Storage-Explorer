@@ -1,6 +1,12 @@
 name: Release Windows
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release (for example, 0.1.0)
+        required: true
+        type: string
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
@@ -9,8 +15,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-refs/tags/${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
@@ -18,6 +27,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
 
       - name: Check release version
         shell: pwsh
@@ -30,8 +41,8 @@ jobs:
             (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json -AsHashtable).version
             [regex]::Match((Get-Content src-tauri/Cargo.toml -Raw), '(?m)^version = "([^"]+)"').Groups[1].Value
           )
-          if ($versions.Where({ $_ -ne $env:GITHUB_REF_NAME }).Count) {
-            throw "Tag $env:GITHUB_REF_NAME must match all application versions: $($versions -join ', ')"
+          if ($versions.Where({ $_ -ne $env:RELEASE_TAG }).Count) {
+            throw "Tag $env:RELEASE_TAG must match all application versions: $($versions -join ', ')"
           }
 
       - uses: actions/setup-node@v6
@@ -63,8 +74,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Storage Explorer ${{ github.ref_name }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: Storage Explorer ${{ env.RELEASE_TAG }}
           releaseBody: Download the Windows installer or standalone executable below. WebView2 is required to run the application.
           releaseDraft: false
           prerelease: false

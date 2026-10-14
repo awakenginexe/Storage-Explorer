@@ -25,6 +25,8 @@ The Windows executable is `src-tauri/target/release/storage-explorer.exe`. The p
 
 Pushing a version tag such as `0.1.0` runs `.github/workflows/release.yml`. The Windows job checks frontend/Rust tests and Clippy, builds the application, and publishes the NSIS installer and standalone executable to a GitHub Release. Branch and pull-request pushes do not run this workflow. No repository secret is needed beyond GitHub's automatic `GITHUB_TOKEN`.
 
+To retry an existing tag that has no run, select **Release Windows → Run workflow** on the Actions page, use the `main` branch, and enter the existing tag. The manual run checks out and releases that tag, with the same version checks as a tag push.
+
 Before tagging a new version, update `package.json`, `package-lock.json`, `src-tauri/Cargo.toml` (and its lockfile), and `src-tauri/tauri.conf.json` to match the tag. The workflow rejects mismatched versions.
 
 ## Functionality
